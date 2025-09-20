@@ -1,4 +1,4 @@
-# EC2 AI Agent Remediation System – Workflow 3
+# EC2 AI Agent Remediation System
 
 ## Project Scenario
 
