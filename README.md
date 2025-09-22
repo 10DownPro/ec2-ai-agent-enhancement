@@ -1,5 +1,8 @@
 # EC2 AI Agent Remediation System 🚀
 
+![System Overview](./screenshots/system-overview.png)
+*High-level architecture showing AI agent workflow*
+
 ## Project Scenario
 
 Netflix's DevOps team struggled with slow incident response whenever multiple EC2 instances failed during peak streaming hours. Engineers had to:
@@ -11,6 +14,9 @@ Netflix's DevOps team struggled with slow incident response whenever multiple EC
 This created bottlenecks, wasted engineering cycles, & slowed recovery.
 
 **Solution:** An AI-powered ServiceNow agent that parses incidents, validates EC2 records, requests human approval, & executes remediation API calls automatically. Automation where it counts, human control where it matters.
+
+![Workflow Diagram](./screenshots/workflow-diagram.png)
+*Complete workflow from incident detection to remediation*
 
 ---
 
@@ -42,6 +48,9 @@ The system needed to:
   > "I found EC2 instance i-05f25ae3c5a995dc6 from incident INC0012345. Run remediation?"
 - Proceeds only on explicit approval
 
+![Approval Dialog](./screenshots/approval-dialog.png)
+*Human approval interface showing instance details and confirmation*
+
 ### Step 4: Remediation Execution
 - On approval, script uses the Connection & Credential Alias `AWS Integration Server C C Alias` → resolves to the HTTP Connection `AWS Integration Server Connection` with Credential `AWS Integration Server Credentials`
 - REST POST goes to: `https://codon-staging.emaginelc.com/api/v1/queue/start`
@@ -56,6 +65,9 @@ All outcomes are written to `x_snc_ec2_monito_0_remediation_log`, including:
 - Approver identity
 - Attempted status (e.g., OFF → ON)
 
+![Logging Dashboard](./screenshots/logging-dashboard.png)
+*Remediation log showing successful and failed attempts*
+
 ---
 
 ## Troubleshooting 🛠️ 
@@ -66,6 +78,9 @@ All outcomes are written to `x_snc_ec2_monito_0_remediation_log`, including:
 **Root cause:** `connectionInfo` was null because the alias had no linked Connection record.
 
 **Fix:** Created Connection `AWS Integration Server Connection` (HTTPS host `codon-staging.emaginelc.com`, base path `/api/v1/queue/start`), linked it to Alias `AWS Integration Server C C Alias`, & attached Credential `AWS Integration Server Credentials` (Basic Auth).
+
+![Connection Configuration](./screenshots/connection-config.png)
+*ServiceNow connection and credential configuration*
 
 ### 2) Record exists but query returns nothing
 
@@ -88,6 +103,9 @@ if (!gr.next()) {
 **Root cause:** Log table ACLs/permissions blocked inserts.
 
 **Fix:** Enabled write access for `x_snc_ec2_monito_0_remediation_log` in the scoped app & verified `insert()` works; added defensive checks & full error strings on failure.
+
+![Before and After](./screenshots/before-after-metrics.png)
+*Performance metrics showing improvement in incident response times*
 
 ---
 
