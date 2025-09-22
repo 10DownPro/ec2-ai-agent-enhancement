@@ -16,7 +16,7 @@ This created bottlenecks, wasted engineering cycles, & slowed recovery.
 
 ## Business Need
 
-The system had to:
+The system needed to:
 
 - Reduce manual remediation workload for engineers
 - Speed up EC2 instance recovery during traffic spikes
@@ -59,7 +59,7 @@ All outcomes are written to `x_snc_ec2_monito_0_remediation_log`, including:
 ---
 
 ## Troubleshooting 🛠️ 
-*(What we actually fixed)*
+*(Annoying issues I ran into)*
 
 ### 1) Cannot convert null to an object
 
