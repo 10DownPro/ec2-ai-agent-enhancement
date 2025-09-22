@@ -1,91 +1,106 @@
-# EC2 AI Agent Remediation System
+# EC2 AI Agent Remediation System 🚀
 
 ## Project Scenario
 
-Netflix’s DevOps team reported slow response times when multiple EC2 instances failed during peak traffic events. Previously, engineers had to manually extract EC2 Instance IDs from incident descriptions, search for the record, and trigger remediation scripts by hand. This manual process created bottlenecks and delayed recovery.
+Netflix's DevOps team struggled with slow incident response whenever multiple EC2 instances failed during peak streaming hours. Engineers had to:
 
-We built **Workflow 3** to solve this: an AI agent embedded in ServiceNow that can identify EC2 instance details from incident records, validate existence, request human approval, and execute a remediation API call automatically.
+1. Manually scan incident descriptions for instance IDs
+2. Search the EC2 Instance table
+3. Trigger remediation scripts by hand
+
+This created bottlenecks, wasted engineering cycles, & slowed recovery.
+
+**Solution:** An AI-powered ServiceNow agent that parses incidents, validates EC2 records, requests human approval, & executes remediation API calls automatically. Automation where it counts, human control where it matters.
 
 ---
 
 ## Business Need
 
-The solution needed to:
-- Reduce manual remediation workload on engineers
-- Speed up EC2 instance recovery during high-volume incident periods
-- Improve accuracy when extracting EC2 instance information
-- Maintain human-in-the-loop decision-making for accountability
-- Log all actions for audit and troubleshooting
+The system had to:
+
+- Reduce manual remediation workload for engineers
+- Speed up EC2 instance recovery during traffic spikes
+- Improve accuracy when extracting instance details
+- Keep human-in-the-loop approval for accountability
+- Log everything for audit, compliance, & debugging
 
 ---
 
 ## Technical Workflow
 
-### Step 1: Incident Parsing  
-The agent checks new incident records in the `u_incident` table. It parses the description field using regex to identify potential EC2 instance IDs (format: `i-xxxxxxxxxxxxxxxxx`).
+### Step 1: Incident Parsing
+- AI agent scans new `u_incident` records
+- Regex pulls EC2 IDs in format `i-xxxxxxxxxxxxxxxxx` from short descriptions
 
-### Step 2: EC2 Instance Validation  
-The script queries the `x_snc_ec2_monito_0_ec2_instance` table to confirm the instance exists and extract its `sys_id`.
+### Step 2: EC2 Instance Validation
+- Looks up the ID in `x_snc_ec2_monito_0_ec2_instance`
+- If found, returns the record's `sys_id` & current `instance_status`
+- If missing, returns a clean error (no crashes)
 
-### Step 3: Human Approval  
-Once validated, the agent asks:  
-_"I found EC2 instance `i-05f25ae3c5a995dc6` linked to incident `INC0012345`. Would you like to run the remediation script?"_
+### Step 3: Human Approval
+- AI agent confirms findings with the user:
+  > "I found EC2 instance i-05f25ae3c5a995dc6 from incident INC0012345. Run remediation?"
+- Proceeds only on explicit approval
 
-### Step 4: Remediation Execution  
-If approved, the script runs a REST call to the AWS Integration Server using credentials linked via `sys_alias`. It triggers the existing `Call_ec2_remediation.js` script.
+### Step 4: Remediation Execution
+- On approval, script uses the Connection & Credential Alias `AWS Integration Server C C Alias` → resolves to the HTTP Connection `AWS Integration Server Connection` with Credential `AWS Integration Server Credentials`
+- REST POST goes to: `https://codon-staging.emaginelc.com/api/v1/queue/start`
+- Body includes the approved `instance_id`
 
-### Step 5: Logging  
-The outcome (success or failure) is logged to the `x_snc_ec2_monito_0_remediation_log` table along with:
-- Response time
-- HTTP status
-- Full JSON payload
-- User who approved it
+### Step 5: Logging
 
----
-
-## Troubleshooting & Issues
-
-### 1. `ReferenceError` on Line 36
-**Cause**: Using a global-scoped class (`sn_cc.ConnectionInfoProvider`) inside a scoped script.  
-**Fix**: Replaced the credential reference method with one compatible with the scoped app or adjusted app scope.
-
-📍 *[Screenshot Placeholder: ReferenceError trace]*
+All outcomes are written to `x_snc_ec2_monito_0_remediation_log`, including:
+- HTTP status & response body
+- Request payload
+- Timestamp & total response time (ms)
+- Approver identity
+- Attempted status (e.g., OFF → ON)
 
 ---
 
-### 2. Instance Not Found in Monitoring Table
-**Cause**: Instance ID not found or record missing.  
-**Fix**: Added defensive checks and a fallback message to notify the user if the EC2 instance wasn’t found.
+## Troubleshooting 🛠️ 
+*(What we actually fixed)*
 
-📍 *[Screenshot Placeholder: Missing EC2 record]*
+### 1) Cannot convert null to an object
 
----
+**Root cause:** `connectionInfo` was null because the alias had no linked Connection record.
 
-### 3. No Action After Script Execution
-**Cause**: REST call made successfully, but log entry not created.  
-**Fix**: Ensured the remediation log table is write-enabled and checked for `insert()` ACLs or field restrictions.
+**Fix:** Created Connection `AWS Integration Server Connection` (HTTPS host `codon-staging.emaginelc.com`, base path `/api/v1/queue/start`), linked it to Alias `AWS Integration Server C C Alias`, & attached Credential `AWS Integration Server Credentials` (Basic Auth).
 
-📍 *[Screenshot Placeholder: Missing log row]*
+### 2) Record exists but query returns nothing
+
+**Root cause:** Code assumed a record will always be found; using fields without checking `.next()` led to null access.
+
+**Fix:** Guarded queries with `.next()` & return clear messages when no match is found.
+
+```javascript
+// Safe pattern used in helpers
+var gr = new GlideRecord('x_snc_ec2_monito_0_ec2_instance');
+gr.addQuery('instance_id', instanceId);
+gr.query();
+if (!gr.next()) {
+  return { success: false, message: 'Instance not found: ' + instanceId };
+}
+```
+
+### 3) REST call OK but no logs
+
+**Root cause:** Log table ACLs/permissions blocked inserts.
+
+**Fix:** Enabled write access for `x_snc_ec2_monito_0_remediation_log` in the scoped app & verified `insert()` works; added defensive checks & full error strings on failure.
 
 ---
 
 ## Optimization & Future Enhancements
 
-### What Worked Well
-- The human approval flow gave control to engineers while automating tedious steps.
-- Logging all response data allows for post-mortem review.
-- Using existing tables made integration lightweight.
-
-### What Could Be Improved
-
-| Area | Suggested Improvement |
-|------|------------------------|
-| Incident Filtering | Add logic to check only recent high-priority incidents |
-| ID Detection | Expand to detect **Instance Names** as a fallback when IDs aren’t present |
-| Performance | Cache frequent queries to reduce DB hits in large-scale deployments |
-| Scalability | Allow multiple instance IDs per incident to be queued and remediated |
-| UX | Integrate into Slack or Teams to provide real-time approvals & faster response |
-| Testing | Add a dry-run mode for non-prod environments |
+| Area | Next Step |
+|------|-----------|
+| Incident Filtering | Only scan P1/P2 or recent incidents during peak windows |
+| ID Detection | Fallback to instance_name if ID is missing |
+| Resiliency | Add retry with exponential backoff for 5xx/timeout |
+| Scalability | Batch remediate multiple IDs per incident |
+| Integrations | Slack/Teams approval buttons for faster response |
+| Testing | "Dry-run" mode for non-prod with no external API call |
 
 ---
 
@@ -94,12 +109,6 @@ The outcome (success or failure) is logged to the `x_snc_ec2_monito_0_remediatio
 ```
 /EC2-AI-Agent-Remediation/
 ├── README.md
-├── Diagram.png
-└── ec2-ai-agent-enhancement.xml
+├── Diagram.png                       # High-level architecture
+└── ec2-ai-agent-enhancement.xml      # Update set for ServiceNow
 ```
-
----
-
-## Status
-
-This workflow is live and functional in our ServiceNow instance, actively supporting DevOps with faster, traceable, and AI-assisted EC2 instance recovery.
